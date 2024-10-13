@@ -5,6 +5,8 @@ logo.ico
 PhasOverlay.spec
 __pycache__/
 .git/
+dist/
+build/
 
 For context, here is the file at path 'config.json':
 
@@ -14,7 +16,7 @@ For context, here is the file at path 'config.json':
         "level": "DEBUG"
     },
     "ui": {
-        "debug_mode": true,
+        "debug_mode": false,
         "window_opacity": 0.7,
         "min_window_size": {
             "width": 200,
@@ -26,7 +28,6 @@ For context, here is the file at path 'config.json':
         "toggle_crosshair": "ctrl_l+shift+c",
         "toggle_settings": "ctrl_l+shift+s",
         "toggle_overlay_visibility": "ctrl_l+shift+a",
-        "toggle_edit_mode": "ctrl_l+shift+e",
         "quit": "ctrl_l+shift+q"
     },
     "cooldowns": {
@@ -77,17 +78,50 @@ def write_context_to_file(context, output_file="context.txt"):
 context = generate_context()
 write_context_to_file(context)
 
+For context, here is the file at path 'crosshair_widget.py':
+
+# crosshair_widget.py
+
+from PyQt5.QtWidgets import QWidget
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPainter, QColor
+
+class CrosshairWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        
+        # Set widget to be small and centered with a lime-green dot
+        self.setFixedSize(10, 10)  # Adjust size as needed
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setVisible(False)  # Initially hidden
+
+    def paintEvent(self, event):
+        # Paint a lime-green dot in the center
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(QColor(0, 255, 0))  # Lime green color
+        painter.setPen(Qt.NoPen)
+        # Draw a circle in the center
+        painter.drawEllipse(int(self.width() / 2) - 3, int(self.height() / 2) - 3, 6, 6)
+
+
 For context, here is the file at path 'keybind_config_controller.py':
 
 # keybind_config_controller.py
 
 import logging
+from PyQt5.QtCore import pyqtSignal, QObject
 from keybind_config_model import KeybindConfigModel
 from keybind_config_view import KeybindConfigView
 from keybind_manager import KeybindManager
 
-class KeybindConfigController:
+class KeybindConfigController(QObject):
+    keybind_recording_started = pyqtSignal(str)  # Signal for starting keybind recording
+    keybind_recording_finished = pyqtSignal(str, str)  # Signal for finishing keybind recording
+
     def __init__(self, keybind_manager: KeybindManager, config_file='config.json'):
+        super().__init__()
         self.model = KeybindConfigModel(config_file)
         self.view = KeybindConfigView()
         self.keybind_manager = keybind_manager
@@ -95,31 +129,49 @@ class KeybindConfigController:
         self.current_action = None
         self.original_keybind = None
 
-        # Initialize the view with the keybinds data
+        # Initialize the view with keybinds data and set up connections
         self.view.display_keybinds(
-            self.model.keybinds, 
-            self.start_recording, 
-            self.keybind_manager.chord_to_user_friendly  # Pass the function here
+            self.model.keybinds,
+            self.start_recording,
+            self.keybind_manager.chord_to_user_friendly
         )
+
+        # Connect signals
+        self.keybind_recording_finished.connect(self.update_keybind)
 
     def toggle_visibility(self):
         self.view.toggle_visibility()
 
     def start_recording(self, action, keybind_button):
         if self.is_recording:
-            return  # Prevent starting a new recording while already recording
+            return  # Prevent starting a new recording if already recording
 
         self.is_recording = True
         self.current_action = action
         self.original_keybind = self.model.keybinds[action]
         keybind_button.setText("Recording...")
+
+        # Emit signal to start recording
         self.keybind_manager.start_recording(action, lambda a, k: self.finish_recording(a, k, keybind_button))
+        self.keybind_recording_started.emit(action)
 
     def finish_recording(self, action, new_keybind, keybind_button):
         self.is_recording = False
         self.current_action = None
+
+        # Emit signal instead of directly updating
+        self.keybind_recording_finished.emit(action, new_keybind)
+        keybind_button.setText(self.keybind_manager.chord_to_user_friendly(new_keybind).upper())
+
+    def update_keybind(self, action, new_keybind):
+        """Slot to update model and save keybinds."""
         self.model.update_keybind(action, new_keybind)
-        self.view.update_keybind_display(action, keybind_button, new_keybind, self.keybind_manager.chord_to_user_friendly)
+        self.view.update_keybind_display(
+            action,
+            self.view.get_keybind_button(action),
+            new_keybind,
+            self.keybind_manager.chord_to_user_friendly
+        )
 
     def cancel_recording(self):
         # If recording is canceled, revert to the original keybind
@@ -129,6 +181,7 @@ class KeybindConfigController:
             self.is_recording = False
             self.current_action = None
             self.view.display_keybinds(self.model.keybinds, self.start_recording, self.keybind_manager.chord_to_user_friendly)
+
 
 For context, here is the file at path 'keybind_config_model.py':
 
@@ -162,14 +215,19 @@ class KeybindConfigModel:
 
 For context, here is the file at path 'keybind_config_view.py':
 
+# keybind_config_view.py
+
 from PyQt5.QtWidgets import QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSlot
 import logging
 
 class KeybindConfigView(QWidget):
     def __init__(self):
         super().__init__()
-        
+        self.init_ui()
+        self.keybind_buttons = {}  # Dictionary to store buttons by action
+
+    def init_ui(self):
         # Set window flags for an always-on-top frameless window
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
         self.setWindowOpacity(0.9)
@@ -211,28 +269,31 @@ class KeybindConfigView(QWidget):
         # Add keybind rows
         for action, keybind in keybinds.items():
             # Format action name to be user-friendly
-            user_friendly_action = action.replace("_", " ").title()  # Replaces underscores and capitalizes each word
+            user_friendly_action = action.replace("_", " ").title()
 
             # Convert keybind chord to a user-friendly display format and make uppercase
             user_friendly_keybind = chord_to_user_friendly(keybind).upper()
             
             # Create a label with the user-friendly action name
             action_label = QLabel(user_friendly_action)
-            action_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)  # Vertically center-align text
-            action_label.setFixedHeight(26)  # Slightly increased height for descenders
+            action_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+            action_label.setFixedHeight(26)
             action_label.setStyleSheet("color: white; font-size: 13px; font-weight: bold; border: none;")
 
             # Create a button with the same height as the label
             keybind_button = QPushButton(user_friendly_keybind)
-            keybind_button.setFixedHeight(26)  # Match the height of the label
+            keybind_button.setFixedHeight(26)
             keybind_button.setStyleSheet(
                 "color: black; background-color: white; font-size: 12px; border: 1px solid black; border-radius: 0;"
             )
             keybind_button.clicked.connect(lambda _, a=action, btn=keybind_button: start_recording_callback(a, btn))
 
-            # Layout for each action and button pair with even spacing
+            # Store button in the dictionary
+            self.keybind_buttons[action] = keybind_button
+
+            # Layout for each action and button pair
             row_layout = QHBoxLayout()
-            row_layout.setContentsMargins(10, 4, 10, 4)  # Balanced padding to center text
+            row_layout.setContentsMargins(10, 4, 10, 4)
             row_layout.setSpacing(12)
             row_layout.addWidget(action_label)
             row_layout.addWidget(keybind_button)
@@ -241,19 +302,19 @@ class KeybindConfigView(QWidget):
             row_widget.setLayout(row_layout)
             self.layout.addWidget(row_widget)
 
+    def get_keybind_button(self, action):
+        """Retrieve the button associated with a given action."""
+        return self.keybind_buttons.get(action)
+
+    @pyqtSlot(str, QPushButton, str)
     def update_keybind_display(self, action, keybind_button, new_keybind, chord_to_user_friendly):
-        # Update button text with a user-friendly keybind display in uppercase
+        """Update button text with a user-friendly keybind display in uppercase."""
         user_friendly_keybind = chord_to_user_friendly(new_keybind).upper()
         keybind_button.setText(user_friendly_keybind)
 
-    def show_widget(self):
-        self.setVisible(True)
-
-    def hide_widget(self):
-        self.setVisible(False)
-
     def toggle_visibility(self):
         self.setVisible(not self.isVisible())
+
 
 For context, here is the file at path 'keybind_manager.py':
 
@@ -342,13 +403,13 @@ class KeybindManager:
                 self.recorded_chord.append(key_name)
             elif key_name in ('ctrl_l', 'ctrl_r', 'alt_l', 'alt_r', 'shift', 'shift_r') and key_name not in self.recorded_chord:
                 self.recorded_chord.insert(self.get_control_key_index(key_name), key_name)
-            logging.debug(f"Recording key chord: {self.recorded_chord}")
+            #logging.debug(f"Recording key chord: {self.recorded_chord}")
         else:
             # Normal key press handling
             self.current_keys.add(key_name)
-            logging.debug(f"Current keys held: {self.current_keys}")
+            #logging.debug(f"Current keys held: {self.current_keys}")
             for action, bind_info in self.keybinds.items():
-                logging.debug(f"Checking action '{action}' with required keys: {bind_info['keys']}")
+                #logging.debug(f"Checking action '{action}' with required keys: {bind_info['keys']}")
                 if bind_info['keys'].issubset(self.current_keys) and not bind_info['cooldown']:
                     logging.debug(f"Activating keybind action '{action}' with keys: {self.current_keys}")
                     if bind_info['callback']:
@@ -362,8 +423,8 @@ class KeybindManager:
         key_name = self.get_key_name(key)
         if key_name in self.current_keys:
             self.current_keys.remove(key_name)
-        logging.debug(f"Key released: {key_name}")
-        logging.debug(f"Keys currently held after release: {self.current_keys}")
+        #logging.debug(f"Key released: {key_name}")
+        #logging.debug(f"Keys currently held after release: {self.current_keys}")
 
         if self.is_recording and not self.current_keys:
             chord = '+'.join(self.recorded_chord)
@@ -374,12 +435,12 @@ class KeybindManager:
         if self.is_recording:
             self.callback(self.current_action, chord)
             self.is_recording = False
-            logging.info(f"Recording finished for action: {self.current_action} with new keybind: {chord}")
+            #logging.info(f"Recording finished for action: {self.current_action} with new keybind: {chord}")
 
     def cancel_recording(self):
         """Cancel recording and reset the recording state."""
         self.is_recording = False
-        logging.info("Recording canceled.")
+        #logging.info("Recording canceled.")
 
     def get_control_key_index(self, key_name):
         """Return the preferred index for control keys in the recorded chord."""
@@ -418,8 +479,6 @@ class KeybindManager:
 
 For context, here is the file at path 'main.py':
 
-# main.py
-
 import sys
 import json
 import logging
@@ -431,7 +490,6 @@ from overlay_controller import OverlayController
 from keybind_manager import KeybindManager
 from keybind_config_controller import KeybindConfigController
 
-# Setup logging
 def setup_logging(log_config):
     logging.basicConfig(
         level=getattr(logging, log_config.get("level", "DEBUG").upper(), None),
@@ -439,7 +497,6 @@ def setup_logging(log_config):
         handlers=[logging.StreamHandler(sys.stdout)]
     )
 
-# Load configuration
 def load_config():
     with open("config.json", "r") as f:
         config = json.load(f)
@@ -447,7 +504,6 @@ def load_config():
     logging.debug("Configuration loaded successfully")
     return config
 
-# Main execution
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal.SIG_DFL)  # Set SIGINT to default for Ctrl+C handling
     config = load_config()
@@ -458,27 +514,34 @@ if __name__ == "__main__":
     keybind_manager = KeybindManager(model, config.get("keybinds", {}), config.get("cooldowns", {}))
     keybind_config_controller = KeybindConfigController(keybind_manager, config_file='config.json')
     view = OverlayView(config.get("ui", {}), keybind_manager, keybind_config_controller)
-    controller = OverlayController(model, view, config.get("cooldowns", {}))
+    controller = OverlayController(model, view, keybind_manager, config.get("cooldowns", {}))
     
     controller.start()
     sys.exit(app.exec_())
-
 
 For context, here is the file at path 'overlay_controller.py':
 
 import logging
 import time
-from PyQt5.QtCore import QCoreApplication
+from PyQt5.QtCore import QCoreApplication, QObject
+from PyQt5.QtWidgets import QApplication
 from overlay_model import OverlayModel
 from overlay_view import OverlayView
 
 class OverlayController:
-    def __init__(self, model: OverlayModel, view: OverlayView, cooldowns_config):
+    def __init__(self, model, view, keybind_manager, cooldowns_config):
         self.model = model
         self.view = view
+        self.keybind_manager = keybind_manager
         self.timeout = cooldowns_config.get("default_interval", 120000)  # 2 minutes default
         self.start_time = time.time()
         logging.debug(f"OverlayController initialized with timeout: {self.timeout} ms.")
+
+        # Register quit action
+        self.keybind_manager.set_callback("quit", self.quit_application)
+        self.keybind_manager.set_callback("toggle_overlay_visibility", self.toggle_overlay_visibility)
+        self.keybind_manager.set_callback("toggle_crosshair", self.view.toggle_crosshair)
+        self.keybind_manager.set_callback("toggle_timer", self.view.toggle_smudge_timer)
 
     def start(self):
         self.check_game_window_loop()
@@ -499,6 +562,20 @@ class OverlayController:
         if geometry:
             x, y, width, height = geometry
             self.view.set_overlay_geometry(x, y, width, height)
+
+    def quit_application(self):
+        """Gracefully quit the application."""
+        logging.info("Quitting application gracefully.")
+        QApplication.quit()
+
+    def toggle_overlay_visibility(self):
+        """Toggle the visibility of the entire overlay."""
+        if self.view.isVisible():
+            logging.info("Hiding the overlay.")
+            self.view.hide()
+        else:
+            logging.info("Showing the overlay.")
+            self.view.show()
 
 For context, here is the file at path 'overlay_model.py':
 
@@ -539,13 +616,16 @@ For context, here is the file at path 'overlay_view.py':
 
 import logging
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
+from crosshair_widget import CrosshairWidget
+from smudge_timer import SmudgeTimer
 
 class OverlayView(QWidget):
     def __init__(self, ui_config, keybind_manager, keybind_config_controller):
         super().__init__()
         self.keybind_manager = keybind_manager
         self.keybind_config_controller = keybind_config_controller
+        self.toggle_timer_allowed = True
 
         # Set the widget attributes
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -555,11 +635,23 @@ class OverlayView(QWidget):
         min_size = ui_config.get("min_window_size", {"width": 200, "height": 100})
         self.setMinimumSize(min_size["width"], min_size["height"])
 
+        # Create and position the crosshair widget
+        self.crosshair_widget = CrosshairWidget()
+        self.crosshair_widget.setParent(self)
+        self.crosshair_widget.move(self.width() // 2 - 5, self.height() // 2 - 5)  # Center it
+        self.crosshair_widget.show()  # Initially hidden
+
+        ## Initialize Smudge Timer widget
+        self.smudge_timer = SmudgeTimer(self)
+        self.smudge_timer.move(self.width() - self.smudge_timer.width() - 10, 10)  # Position at top-right
+        self.smudge_timer.show()  # Initially hidden
+
         # Use the existing 'toggle_settings' keybind from config to toggle the config panel
         self.keybind_manager.set_callback("toggle_settings", self.toggle_keybind_config_view)
 
         layout = QVBoxLayout()
-        layout.addWidget(self.keybind_config_controller.view)
+        self.keybind_config_controller.view.setParent(self)
+        self.keybind_config_controller.view.move(10, 10)  # Adjust offset as needed
         self.setLayout(layout)
 
         # Register keybinds for activation at the top level
@@ -584,15 +676,43 @@ class OverlayView(QWidget):
             self.toggle_keybind_config_view()
         # Add more actions as needed
 
+    def toggle_smudge_timer(self):
+        """Start or stop the smudge timer with debounce to prevent rapid toggling."""
+        if not self.toggle_timer_allowed:
+            return
+
+        self.toggle_timer_allowed = False
+        QTimer.singleShot(200, self.allow_toggle_timer)  # Allow toggling again after 200 ms
+
+        if self.smudge_timer.timer.isActive():
+            self.smudge_timer.stop()
+            self.smudge_timer.reset()
+        else:
+            self.smudge_timer.start()
+
+    def allow_toggle_timer(self):
+        """Re-enable timer toggling."""
+        self.toggle_timer_allowed = True
+
     def toggle_keybind_config_view(self):
         """Toggle the visibility of the keybind configuration view."""
+        self.keybind_config_controller.view.toggle_visibility()
+        # Adjust transparency based on visibility
         if self.keybind_config_controller.view.isVisible():
-            self.keybind_config_controller.view.hide_widget()
-            self.setWindowFlags(self.windowFlags() | Qt.WindowTransparentForInput)
-        else:
-            self.keybind_config_controller.view.show_widget()
             self.setWindowFlags(self.windowFlags() & ~Qt.WindowTransparentForInput)
+        else:
+            self.setWindowFlags(self.windowFlags() | Qt.WindowTransparentForInput)
         self.show()  # Refresh the window flags
+
+    def toggle_crosshair(self):
+        """Toggle visibility of the crosshair widget."""
+        self.crosshair_widget.setVisible(not self.crosshair_widget.isVisible())
+
+    def resizeEvent(self, event):
+        """Ensure crosshair stays centered on resize."""
+        self.crosshair_widget.move(self.width() // 2 - 5, self.height() // 2 - 5)
+        self.smudge_timer.move(self.width() - self.smudge_timer.width() - 10, 10)
+        super().resizeEvent(event)
 
 For context, here is the file at path 'requirements.txt':
 
@@ -606,4 +726,156 @@ pyobjc-framework-Quartz>=7.3; platform_system == "Darwin"
 
 # Linux-specific dependencies
 python-xlib>=0.31; platform_system == "Linux"
+
+For context, here is the file at path 'smudge_timer.py':
+
+# smudge_timer_widget.py
+
+from PyQt5.QtWidgets import QWidget, QLabel, QProgressBar, QGridLayout, QVBoxLayout
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+from PyQt5.QtCore import Qt, QTimer, QUrl, QMetaObject
+from PyQt5.QtGui import QPainter, QColor, QPen
+import os
+import sys
+
+class SmudgeBar(QProgressBar):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("""
+            QProgressBar { 
+                background-color: rgba(70, 70, 70, 1); 
+                border-radius: 0px; 
+            }
+            QProgressBar::chunk {
+                background-color: rgba(255, 255, 255, 1); 
+                border-radius: 0px; 
+                width: 1px;
+            }
+        """)
+        self.setRange(0, 180)
+        self.setValue(180)
+        self.setTextVisible(False)
+
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+
+        if painter.isActive():
+            pen = QPen(QColor(0, 0, 0))
+            pen.setWidth(2)
+            painter.setPen(pen)
+            painter.drawLine(int(self.width() / 2), 0, int(self.width() / 2), self.height())
+            painter.drawLine(int(self.width() * 2 / 3), 0, int(self.width() * 2 / 3), self.height())
+
+
+class SmudgeTimer(QWidget):
+    def __init__(self, parent=None, total_time=180):
+        super().__init__(parent)
+        self.setFixedSize(400, 125)  # Set the fixed size of the container
+
+        # Timer setup
+        self.total_time = total_time
+        self.remaining_time = total_time
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_time)
+        self.timer.setInterval(1000)
+
+        # Audio setup
+        audio_file = self.resource_path("countdown.mp3")
+        self.countdown_audio = QMediaPlayer()
+        self.countdown_audio.setMedia(QMediaContent(QUrl.fromLocalFile(audio_file)))
+
+        # Progress bar
+        self.progress_bar = SmudgeBar(self)
+
+        # Labels
+        self.label = QLabel(self)
+        self.label.setAlignment(Qt.AlignCenter)
+        self.label.setStyleSheet("color: white; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
+        self.label.setText(self.format_time(self.remaining_time))
+
+        self.ghost_label = QLabel(self)
+        self.ghost_label.setAlignment(Qt.AlignCenter)
+        self.ghost_label.setStyleSheet("color: white; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
+        self.ghost_label.setText("None")
+
+        self.timer_state_label = QLabel(self)
+        self.timer_state_label.setFixedSize(10, 10)  # Status icon size
+        self.timer_state_label.setStyleSheet("background-color: red; border-radius: 5px;")
+
+        # Layout setup
+        self.container = QWidget(self)
+        self.container.setFixedSize(400, 125)  # Set fixed size for the entire container
+        self.container.setStyleSheet("background-color: rgba(30, 30, 30, 0.8);")
+        container_layout = QGridLayout(self.container)
+        container_layout.setContentsMargins(10, 10, 10, 10)
+
+        # Add widgets to the layout
+        container_layout.addWidget(self.progress_bar, 0, 0)
+        container_layout.addWidget(self.timer_state_label, 1, 0, Qt.AlignLeft)
+        container_layout.addWidget(self.label, 1, 0, Qt.AlignCenter)
+        container_layout.addWidget(self.ghost_label, 2, 0, Qt.AlignCenter)
+
+        # Set the main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.addWidget(self.container)
+        main_layout.setContentsMargins(0, 0, 0, 0)  # Ensure container fills the widget
+        self.setLayout(main_layout)
+
+    def start(self):
+        if not self.timer.isActive():
+            QMetaObject.invokeMethod(self.timer, "start", Qt.QueuedConnection)
+            self.timer_state_label.setStyleSheet("background-color: green; border-radius: 5px;")
+
+    def stop(self):
+        if self.timer.isActive():
+            QMetaObject.invokeMethod(self.timer, "stop", Qt.QueuedConnection)
+            self.timer_state_label.setStyleSheet("background-color: red; border-radius: 5px;")
+            self.countdown_audio.stop()
+
+    def reset(self):
+        self.remaining_time = self.total_time
+        self.progress_bar.setValue(self.remaining_time)
+        self.label.setText(self.format_time(self.remaining_time))
+        self.ghost_label.setText("None")
+        self.ghost_label.setStyleSheet("color: white; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
+
+    def update_time(self):
+        if self.remaining_time <= 0:
+            self.stop()
+            return
+
+        self.remaining_time -= 1
+        self.progress_bar.setValue(self.remaining_time)
+        self.label.setText(self.format_time(self.remaining_time))
+
+        if self.remaining_time in {125, 95, 5}:
+            self.countdown_audio.play()
+
+        # Update ghost label based on remaining time
+        if self.remaining_time <= 0:
+            self.ghost_label.setText("Spirit")
+        elif self.remaining_time <= 90:
+            self.ghost_label.setText("Standard")
+            self.ghost_label.setStyleSheet("color: yellow; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
+        elif self.remaining_time <= 120:
+            self.ghost_label.setText("Demon")
+            self.ghost_label.setStyleSheet("color: red; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
+        else:
+            self.ghost_label.setText("None")
+            self.ghost_label.setStyleSheet("color: white; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
+
+    def format_time(self, seconds):
+        minutes = seconds // 60
+        seconds = seconds % 60
+        return f"{minutes:01d}:{seconds:02d}"
+
+    def resource_path(self, relative_path):
+        try:
+            base_path = sys._MEIPASS
+        except Exception:
+            base_path = os.path.abspath(".")
+        return os.path.join(base_path, relative_path)
+
 

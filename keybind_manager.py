@@ -26,7 +26,7 @@ class KeybindManager:
         self.keybinds = {}  # Dictionary to hold all keybinds with cooldown information
         self.action_cooldowns = {}
 
-        self.default_interval = cooldowns_config.get("default_interval", 500)
+        self.default_interval = cooldowns_config.get("default_interval", 250)
         self.load_keybinds(self.keybinds_config, cooldowns_config.get("specific_intervals", {}))
         self.setup_listeners()
 
@@ -83,13 +83,13 @@ class KeybindManager:
                 self.recorded_chord.append(key_name)
             elif key_name in ('ctrl_l', 'ctrl_r', 'alt_l', 'alt_r', 'shift', 'shift_r') and key_name not in self.recorded_chord:
                 self.recorded_chord.insert(self.get_control_key_index(key_name), key_name)
-            logging.debug(f"Recording key chord: {self.recorded_chord}")
+            #logging.debug(f"Recording key chord: {self.recorded_chord}")
         else:
             # Normal key press handling
             self.current_keys.add(key_name)
-            logging.debug(f"Current keys held: {self.current_keys}")
+            #logging.debug(f"Current keys held: {self.current_keys}")
             for action, bind_info in self.keybinds.items():
-                logging.debug(f"Checking action '{action}' with required keys: {bind_info['keys']}")
+                #logging.debug(f"Checking action '{action}' with required keys: {bind_info['keys']}")
                 if bind_info['keys'].issubset(self.current_keys) and not bind_info['cooldown']:
                     logging.debug(f"Activating keybind action '{action}' with keys: {self.current_keys}")
                     if bind_info['callback']:
@@ -103,8 +103,8 @@ class KeybindManager:
         key_name = self.get_key_name(key)
         if key_name in self.current_keys:
             self.current_keys.remove(key_name)
-        logging.debug(f"Key released: {key_name}")
-        logging.debug(f"Keys currently held after release: {self.current_keys}")
+        #logging.debug(f"Key released: {key_name}")
+        #logging.debug(f"Keys currently held after release: {self.current_keys}")
 
         if self.is_recording and not self.current_keys:
             chord = '+'.join(self.recorded_chord)
@@ -115,12 +115,12 @@ class KeybindManager:
         if self.is_recording:
             self.callback(self.current_action, chord)
             self.is_recording = False
-            logging.info(f"Recording finished for action: {self.current_action} with new keybind: {chord}")
+            #logging.info(f"Recording finished for action: {self.current_action} with new keybind: {chord}")
 
     def cancel_recording(self):
         """Cancel recording and reset the recording state."""
         self.is_recording = False
-        logging.info("Recording canceled.")
+        #logging.info("Recording canceled.")
 
     def get_control_key_index(self, key_name):
         """Return the preferred index for control keys in the recorded chord."""
