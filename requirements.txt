@@ -1,2 +1,10 @@
-pyqt5
-pynput
+PyQt5>=5.15.0
+
+# Windows-specific dependencies
+pywin32>=302; platform_system == "Windows"
+
+# macOS-specific dependencies
+pyobjc-framework-Quartz>=7.3; platform_system == "Darwin"
+
+# Linux-specific dependencies
+python-xlib>=0.31; platform_system == "Linux"

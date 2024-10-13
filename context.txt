@@ -4,274 +4,39 @@ countdown.mp3
 logo.ico
 PhasOverlay.spec
 __pycache__/
+.git/
 
 For context, here is the file at path 'config.json':
 
 {
-  "toggle_timer": "1",
-  "toggle_settings": "ctrl_l+shift+s",
-  "toggle_crosshair": "ctrl_l+shift+c",
-  "toggle_visibility": "ctrl_l+shift+a",
-  "toggle_edit_mode": "ctrl_l+shift+e",
-  "quit": "ctrl_l+shift+q"
+    "game_name": "Phasmophobia",
+    "logging": {
+        "level": "DEBUG"
+    },
+    "ui": {
+        "debug_mode": true,
+        "window_opacity": 0.7,
+        "min_window_size": {
+            "width": 200,
+            "height": 100
+        }
+    },
+    "keybinds": {
+        "toggle_timer": "1",
+        "toggle_crosshair": "ctrl_l+shift+c",
+        "toggle_settings": "ctrl_l+shift+s",
+        "toggle_overlay_visibility": "ctrl_l+shift+a",
+        "toggle_edit_mode": "ctrl_l+shift+e",
+        "quit": "ctrl_l+shift+q"
+    },
+    "cooldowns": {
+        "default_interval": 500,
+        "specific_intervals": {
+            "toggle_timer": 1000,
+            "toggle_settings": 2000
+        }
+    }
 }
-
-
-For context, here is the file at path 'config_window.py':
-
-import json
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QHBoxLayout
-from PyQt5.QtCore import pyqtSlot, pyqtSignal, Qt
-from pynput.keyboard import Controller, Key
-from time import sleep
-
-class ConfigWindow(QWidget):
-    update_ui_signal = pyqtSignal(str)
-    labelStyle = "color: white; font-size: 16pt; background-color: rgba(0, 0, 0, 0);"
-    buttonStyle = """
-    QPushButton {
-        color: white; 
-        font-size: 16pt; 
-        background-color: rgba(0, 0, 0, 0); 
-        border: 1px solid white; 
-        border-radius: 0px;   
-    }
-    
-    QPushButton:hover {
-        background-color: rgba(255, 255, 255, 0.1);
-    }
-    QPushButton:pressed {
-        background-color: rgba(255, 255, 255, 0.3);
-    }
-    """
-
-    recordingButtonStyle = """
-    QPushButton {
-        color: white; 
-        font-size: 16pt; 
-        background-color: rgba(0, 0, 0, 0); 
-        border: 1px solid red; 
-        border-radius: 0px;   
-    }
-    """
-    def __init__(self, game_overlay, keybind_manager):
-        super().__init__()
-        self.game_overlay = game_overlay
-        self.keybind_manager = keybind_manager
-
-        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
-        self.setStyleSheet("background-color: rgba(70, 70, 70, 0.3); border-radius: 0px;")
-
-        smudge_timer_pos = self.game_overlay.smudge_timer.pos()
-        smudge_timer_width = self.game_overlay.smudge_timer.width() - 20
-        self.resize(smudge_timer_width, self.sizeHint().height())
-        self.move(smudge_timer_pos.x() + 10, smudge_timer_pos.y() + self.game_overlay.smudge_timer.height())
-
-        layout = QVBoxLayout()
-
-        self.timer_layout = QHBoxLayout()
-        self.timer_label = QLabel('Toggle Timer:')
-        self.timer_label.setStyleSheet(self.labelStyle)
-        self.timer_button = QPushButton()
-        self.timer_button.setStyleSheet(self.buttonStyle)
-        self.timer_layout.addWidget(self.timer_label)
-        self.timer_layout.addWidget(self.timer_button)
-        layout.addLayout(self.timer_layout)
-
-        self.toggle_layout = QHBoxLayout()
-        self.toggle_label = QLabel('Toggle Visibility:')
-        self.toggle_label.setStyleSheet(self.labelStyle)
-        self.toggle_button = QPushButton()
-        self.toggle_button.setStyleSheet(self.buttonStyle)
-        self.toggle_layout.addWidget(self.toggle_label)
-        self.toggle_layout.addWidget(self.toggle_button)
-        layout.addLayout(self.toggle_layout)
-        
-        self.crosshair_layout = QHBoxLayout()
-        self.crosshair_label = QLabel('Toggle Crosshair:')
-        self.crosshair_label.setStyleSheet(self.labelStyle)
-        self.crosshair_button = QPushButton()
-        self.crosshair_button.setStyleSheet(self.buttonStyle)
-        self.crosshair_layout.addWidget(self.crosshair_label)
-        self.crosshair_layout.addWidget(self.crosshair_button)
-        layout.addLayout(self.crosshair_layout)
-
-        self.toggle_edit_mode_layout = QHBoxLayout()
-        self.toggle_edit_mode_label = QLabel('Toggle Edit Mode:')
-        self.toggle_edit_mode_label.setStyleSheet(self.labelStyle)
-        self.toggle_edit_mode_button = QPushButton()
-        self.toggle_edit_mode_button.setStyleSheet(self.buttonStyle)
-        self.toggle_edit_mode_layout.addWidget(self.toggle_edit_mode_label)
-        self.toggle_edit_mode_layout.addWidget(self.toggle_edit_mode_button)
-        layout.addLayout(self.toggle_edit_mode_layout)
-        
-        self.settings_layout = QHBoxLayout()
-        self.settings_label = QLabel('Show Settings:')
-        self.settings_label.setStyleSheet(self.labelStyle)
-        self.settings_button = QPushButton()
-        self.settings_button.setStyleSheet(self.buttonStyle)
-        self.settings_layout.addWidget(self.settings_label)
-        self.settings_layout.addWidget(self.settings_button)
-        layout.addLayout(self.settings_layout)
-        
-        self.quit_layout = QHBoxLayout()
-        self.quit_label = QLabel('Quit:')
-        self.quit_label.setStyleSheet(self.labelStyle)
-        self.quit_button = QPushButton()
-        self.quit_button.setStyleSheet(self.buttonStyle)
-        self.quit_layout.addWidget(self.quit_label)
-        self.quit_layout.addWidget(self.quit_button)
-        layout.addLayout(self.quit_layout)
-        
-        self.setLayout(layout)
-        
-        self.load_current_keybinds()
-
-        def record_timer_button():
-            self.timer_button.setText('Press a key...')
-            self.timer_button.setStyleSheet(self.recordingButtonStyle)
-            self.record_keybind('toggle_timer')
-        
-        def record_crosshair_button():
-            self.crosshair_button.setText('Press a key...')
-            self.crosshair_button.setStyleSheet(self.recordingButtonStyle)
-            self.record_keybind('toggle_crosshair')
-        
-        def record_toggle_button():
-            self.toggle_button.setText('Press a key...')
-            self.toggle_button.setStyleSheet(self.recordingButtonStyle)
-            self.record_keybind('toggle_visibility')
-
-        def record_toggle_edit_mode_button():
-            self.toggle_edit_mode_button.setText('Press a key...')
-            self.toggle_edit_mode_button.setStyleSheet(self.recordingButtonStyle)
-            self.record_keybind('toggle_edit_mode')
-
-        def record_quit_button():
-            self.quit_button.setText('Press a key...')
-            self.quit_button.setStyleSheet(self.recordingButtonStyle)
-            self.record_keybind('quit')
-
-        def record_settings_button():
-            self.settings_button.setText('Press a key...')
-            self.settings_button.setStyleSheet(self.recordingButtonStyle)
-            self.record_keybind('toggle_settings')
-        
-        self.timer_button.clicked.connect(lambda: record_timer_button())
-        self.crosshair_button.clicked.connect(lambda: record_crosshair_button())
-        self.toggle_button.clicked.connect(lambda: record_toggle_button())
-        self.toggle_edit_mode_button.clicked.connect(lambda: record_toggle_edit_mode_button())
-        self.quit_button.clicked.connect(lambda: record_quit_button())
-        self.settings_button.clicked.connect(lambda: record_settings_button())
-        self.update_ui_signal.connect(self.update_ui)
-    
-    def load_current_keybinds(self):
-        with open('config.json', 'r') as f:
-            config = json.load(f)
-            self.timer_button.setText(self.keybind_manager.chord_to_user_friendly(config['toggle_timer']))
-            self.crosshair_button.setText(self.keybind_manager.chord_to_user_friendly(config['toggle_crosshair']))
-            self.toggle_button.setText(self.keybind_manager.chord_to_user_friendly(config['toggle_visibility']))
-            self.toggle_edit_mode_button.setText(self.keybind_manager.chord_to_user_friendly(config['toggle_edit_mode']))
-            self.quit_button.setText(self.keybind_manager.chord_to_user_friendly(config['quit']))
-            self.settings_button.setText(self.keybind_manager.chord_to_user_friendly(config['toggle_settings']))
-    
-    @pyqtSlot(str)
-    def update_ui(self, chord):
-        chord = self.keybind_manager.chord_to_user_friendly(chord)
-        if self.current_action == 'toggle_visibility':
-            self.toggle_button.setText(chord)
-        elif self.current_action == 'toggle_timer':
-            self.timer_button.setText(chord)
-        elif self.current_action == 'toggle_crosshair':
-            self.crosshair_button.setText(chord)
-        elif self.current_action == 'toggle_edit_mode':
-            self.edit_mode_button.setText(chord)
-        elif self.current_action == 'quit':
-            self.quit_button.setText(chord)
-        elif self.current_action == 'toggle_settings':
-            self.settings_button.setText(chord)
-
-        self.timer_button.setStyleSheet(self.buttonStyle)
-        self.current_action = None
-
-    def on_record_keybind(self, action, chord):
-        self.update_ui_signal.emit(chord)
-
-    def record_keybind(self, action):
-        self.current_action = action
-        self.keybind_manager.record(action, self.on_record_keybind)
-        
-    def showEvent(self, event):
-        super().showEvent(event)
-        self.activateWindow()
-
-
-
-
-
-
-For context, here is the file at path 'container.py':
-
-from PyQt5.QtWidgets import QVBoxLayout, QFrame
-from PyQt5.QtCore import QRect, QPoint, QSize
-
-class Container(QFrame):
-    def __init__(self, widget, width, height):
-        super().__init__()
-        self.edit_mode = False
-        self.initUI(widget, width, height)
-
-    def initUI(self, widget, width, height):
-        self.setFixedSize(width, height)
-        self.layout = QVBoxLayout()
-        self.setLayout(self.layout)
-
-        self.layout.addWidget(widget)
-
-        self.setStyleSheet("background-color: rgba(70, 70, 70, 0.3); border-radius: 0px;")
-
-        
-    def mousePressEvent(self, event):
-        self.offset = event.pos()
-
-    def mouseMoveEvent(self, event):
-        if self.edit_mode:
-            margin = 5  # 5px margin
-            new_pos = event.pos() - self.offset
-            final_pos = self.pos() + new_pos
-
-            parent_rect = self.parentWidget().rect().adjusted(10, 10, -10, -10)  # 10px padding for the main window
-
-            new_x = final_pos.x()
-            new_y = final_pos.y()
-
-            def check_collision(test_rect):
-                for sibling in self.parentWidget().findChildren(Container):
-                    if sibling is not self:
-                        sibling_rect = sibling.geometry().adjusted(-margin, -margin, margin, margin)
-                        if sibling_rect.intersects(test_rect):
-                            return True
-                return False
-
-            test_rect_x = QRect(QPoint(new_x - margin, self.y() - margin), self.size() + QSize(2 * margin, 2 * margin))
-            test_rect_y = QRect(QPoint(self.x() - margin, new_y - margin), self.size() + QSize(2 * margin, 2 * margin))
-
-            x_within_boundary = parent_rect.left() <= new_x - margin and new_x + self.width() + margin <= parent_rect.right()
-            y_within_boundary = parent_rect.top() <= new_y - margin and new_y + self.height() + margin <= parent_rect.bottom()
-
-            if x_within_boundary and not check_collision(test_rect_x):
-                self.move(new_x, self.y())
-            if y_within_boundary and not check_collision(test_rect_y):
-                self.move(self.x(), new_y)
-
-    def enableEditMode(self):
-        self.setFrameStyle(QFrame.Box | QFrame.Plain)
-        self.setLineWidth(2)
-        self.edit_mode = True
-
-    def disableEditMode(self):
-        self.edit_mode = False
-        self.setFrameStyle(QFrame.NoFrame)
 
 For context, here is the file at path 'context.py':
 
@@ -312,323 +77,195 @@ def write_context_to_file(context, output_file="context.txt"):
 context = generate_context()
 write_context_to_file(context)
 
-For context, here is the file at path 'crosshair.py':
+For context, here is the file at path 'keybind_config_controller.py':
 
-from PyQt5.QtWidgets import QWidget
-from PyQt5.QtGui import QPainter, QColor
-from PyQt5.QtCore import Qt
+# keybind_config_controller.py
 
-class Crosshair(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.show_crosshair = True
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        if self.show_crosshair:
-            painter = QPainter(self)
-            painter.setRenderHint(QPainter.Antialiasing)
-            painter.setBrush(QColor(0, 255, 0))
-            painter.setPen(QColor(0, 255, 0))
-            painter.drawEllipse(int(self.width() / 2) - 5, int(self.height() / 2) - 5, 6, 6)
-
-    def toggle_crosshair(self):
-        self.show_crosshair = not self.show_crosshair
-        self.update()
-
-For context, here is the file at path 'draggable.py':
-
-import sys
-from PyQt5.QtCore import Qt, QPoint, QRect, QSize
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QFrame, QLayout, QLayoutItem
-import traceback
-
-class CustomLayout(QLayout):
-    def __init__(self, parent=None):
-        super(CustomLayout, self).__init__(parent)
-        self.items = []
-
-    def addItem(self, item):
-        self.items.append(item)
-
-    def count(self):
-        return len(self.items)
-
-    def itemAt(self, index):
-        if 0 <= index < len(self.items):
-            return self.items[index]
-        return None
-
-    def takeAt(self, index):
-        if 0 <= index < len(self.items):
-            return self.items.pop(index)
-        return None
-
-    def setGeometry(self, rect):
-        pass
-
-    def sizeHint(self):
-        return self.minimumSize()
-
-    def minimumSize(self):
-        return self.geometry().size()
-
-class ContainerWidget(QFrame):
-    def __init__(self):
-        super().__init__()
-        self.edit_mode = False
-        self.initUI()
-
-    def initUI(self):
-        self.setFixedSize(200, 200)
-        self.layout = QVBoxLayout()
-        self.setLayout(self.layout)
-
-        #self.layout.setContentsMargins(5, 5, 5, 5)  # 5px margin
-        self.setStyleSheet("padding: 5px;")
-
-        self.button = QPushButton('Button', self)
-        self.layout.addWidget(self.button)
-
-        self.label = QLabel('Label', self)
-        self.layout.addWidget(self.label)
-
-    def mousePressEvent(self, event):
-        self.offset = event.pos()
-
-    def mouseMoveEvent(self, event):
-        if self.edit_mode:
-            margin = 5  # 5px margin
-            new_pos = event.pos() - self.offset
-            final_pos = self.pos() + new_pos
-
-            parent_rect = self.parentWidget().rect().adjusted(10, 10, -10, -10)  # 10px padding for the main window
-
-            new_x = final_pos.x()
-            new_y = final_pos.y()
-
-            def check_collision(test_rect):
-                for sibling in self.parentWidget().findChildren(ContainerWidget):
-                    if sibling is not self:
-                        sibling_rect = sibling.geometry().adjusted(-margin, -margin, margin, margin)
-                        if sibling_rect.intersects(test_rect):
-                            return True
-                return False
-
-            test_rect_x = QRect(QPoint(new_x - margin, self.y() - margin), self.size() + QSize(2 * margin, 2 * margin))
-            test_rect_y = QRect(QPoint(self.x() - margin, new_y - margin), self.size() + QSize(2 * margin, 2 * margin))
-
-            x_within_boundary = parent_rect.left() <= new_x - margin and new_x + self.width() + margin <= parent_rect.right()
-            y_within_boundary = parent_rect.top() <= new_y - margin and new_y + self.height() + margin <= parent_rect.bottom()
-
-            if x_within_boundary and not check_collision(test_rect_x):
-                self.move(new_x, self.y())
-            if y_within_boundary and not check_collision(test_rect_y):
-                self.move(self.x(), new_y)
-
-    def enableEditMode(self):
-        self.setFrameStyle(QFrame.Box | QFrame.Plain)
-        self.setLineWidth(2)
-        self.edit_mode = True
-
-    def disableEditMode(self):
-        self.edit_mode = False
-        self.setFrameStyle(QFrame.NoFrame)
-
-class MainWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.initUI()
-
-    def initUI(self):
-        self.setWindowTitle('Draggable Containers')
-        self.setGeometry(100, 100, 800, 600)
-
-        self.layout = CustomLayout()
-        self.setLayout(self.layout)
-
-        self.container1 = ContainerWidget()
-        self.layout.addWidget(self.container1)
-
-        self.container2 = ContainerWidget()
-        self.layout.addWidget(self.container2)
-
-        self.adjustContainerPositions()  # Adjust positions to prevent overlap
-
-        self.toggle_button = QPushButton('Toggle Edit Mode', self)
-        self.toggle_button.clicked.connect(self.toggleEditMode)
-        self.layout.addWidget(self.toggle_button)
-
-    def adjustContainerPositions(self):
-        containers = self.findChildren(ContainerWidget)
-        for i, container in enumerate(containers):
-            container.move(10 + i * 210, 10)
-
-    def toggleEditMode(self):
-        if self.container1.edit_mode:
-            self.container1.disableEditMode()
-            self.container2.disableEditMode()
-        else:
-            self.container1.enableEditMode()
-            self.container2.enableEditMode()
-
-
-def excepthook(exc_type, exc_value, exc_tb):
-    tb_str = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
-    print("Exception caught: ", tb_str)
-
-# Install exception hook
-sys.excepthook = excepthook
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    ex = MainWindow()
-    ex.show()
-    sys.exit(app.exec_())
-
-For context, here is the file at path 'draggable_layout.py':
-
-from PyQt5.QtWidgets import QLayout
-
-class DraggableLayout(QLayout):
-    def __init__(self, parent=None):
-        super(DraggableLayout, self).__init__(parent)
-        self.items = []
-
-    def addItem(self, item):
-        self.items.append(item)
-
-    def count(self):
-        return len(self.items)
-
-    def itemAt(self, index):
-        if 0 <= index < len(self.items):
-            return self.items[index]
-        return None
-
-    def takeAt(self, index):
-        if 0 <= index < len(self.items):
-            return self.items.pop(index)
-        return None
-
-    def setGeometry(self, rect):
-        pass
-
-    def sizeHint(self):
-        return self.minimumSize()
-
-    def minimumSize(self):
-        return self.geometry().size()
-
-For context, here is the file at path 'game_overlay.py':
-
-import ctypes
-from PyQt5.QtWidgets import QWidget, QMessageBox, QVBoxLayout
-from PyQt5.QtCore import Qt, QTimer, QTime, QMetaObject
-from config_window import ConfigWindow
+import logging
+from keybind_config_model import KeybindConfigModel
+from keybind_config_view import KeybindConfigView
 from keybind_manager import KeybindManager
-from smudge_timer import SmudgeTimer
-from crosshair import Crosshair
-from container import Container
-from draggable_layout import DraggableLayout
+
+class KeybindConfigController:
+    def __init__(self, keybind_manager: KeybindManager, config_file='config.json'):
+        self.model = KeybindConfigModel(config_file)
+        self.view = KeybindConfigView()
+        self.keybind_manager = keybind_manager
+        self.is_recording = False
+        self.current_action = None
+        self.original_keybind = None
+
+        # Initialize the view with the keybinds data
+        self.view.display_keybinds(
+            self.model.keybinds, 
+            self.start_recording, 
+            self.keybind_manager.chord_to_user_friendly  # Pass the function here
+        )
+
+    def toggle_visibility(self):
+        self.view.toggle_visibility()
+
+    def start_recording(self, action, keybind_button):
+        if self.is_recording:
+            return  # Prevent starting a new recording while already recording
+
+        self.is_recording = True
+        self.current_action = action
+        self.original_keybind = self.model.keybinds[action]
+        keybind_button.setText("Recording...")
+        self.keybind_manager.start_recording(action, lambda a, k: self.finish_recording(a, k, keybind_button))
+
+    def finish_recording(self, action, new_keybind, keybind_button):
+        self.is_recording = False
+        self.current_action = None
+        self.model.update_keybind(action, new_keybind)
+        self.view.update_keybind_display(action, keybind_button, new_keybind, self.keybind_manager.chord_to_user_friendly)
+
+    def cancel_recording(self):
+        # If recording is canceled, revert to the original keybind
+        if self.is_recording:
+            self.model.keybinds[self.current_action] = self.original_keybind
+            logging.info(f"Recording cancelled for {self.current_action}. Reverted to original bind.")
+            self.is_recording = False
+            self.current_action = None
+            self.view.display_keybinds(self.model.keybinds, self.start_recording, self.keybind_manager.chord_to_user_friendly)
+
+For context, here is the file at path 'keybind_config_model.py':
+
+import json
+import logging
+
+class KeybindConfigModel:
+    def __init__(self, config_file='config.json'):
+        self.config_file = config_file
+        self.load_config()
+
+    def load_config(self):
+        with open(self.config_file, 'r') as f:
+            config = json.load(f)
+        self.keybinds = config.get("keybinds", {})
+
+    def save_config(self):
+        with open(self.config_file, 'r+') as f:
+            config = json.load(f)
+            config["keybinds"] = self.keybinds
+            f.seek(0)
+            json.dump(config, f, indent=4)
+            f.truncate()
+        logging.info("Keybind configuration saved to file.")
+
+    def update_keybind(self, action, new_keybind):
+        self.keybinds[action] = new_keybind
+        logging.info(f"Updated keybind for {action}: {new_keybind}")
+        self.save_config()
 
 
-class GameOverlay(QWidget):
-    def __init__(self, rect):
+For context, here is the file at path 'keybind_config_view.py':
+
+from PyQt5.QtWidgets import QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame
+from PyQt5.QtCore import Qt
+import logging
+
+class KeybindConfigView(QWidget):
+    def __init__(self):
         super().__init__()
-        self.keybind_manager = KeybindManager(self)
-        self.edit_mode = False
         
-        # Set the window to be transparent and always on top
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.WindowTransparentForInput)
-
-        self.setGeometry(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top)
-
-        # Set up a QTime to keep track of the elapsed time
-        self.time_elapsed = QTime(0, 0)
-
-        # Create the SmudgeTimer widget
-        self.smudge_timer = SmudgeTimer(self, 180)
-        self.crosshair = Crosshair(self)
-        self.crosshair.setGeometry(int(self.width() / 2) - 3, int(self.height() / 2) - 3, 11, 11)
-
-        self.layout = DraggableLayout()
-        self.setLayout(self.layout)
-
-
-        self.smudge_timer_container = Container(self.smudge_timer, 400, 125)
-        self.layout.addWidget(self.smudge_timer_container)
-
-
-        # Add the SmudgeTimer widget to the layout
-        #self.smudge_timer.setGeometry(0, 0, 400, 125)
-        #self.smudge_timer.move(self.width() - self.smudge_timer.width(), 0)
-
-        self.config_window = ConfigWindow(self, self.keybind_manager)
-
-
-    def toggle_settings_action(self):  
-        if self.config_window.isVisible():
-            QMetaObject.invokeMethod(self.config_window, "hide", Qt.QueuedConnection) 
-        else:
-            QMetaObject.invokeMethod(self.config_window, "show", Qt.QueuedConnection) 
-
-    def toggle_timer_action(self):
-        if self.smudge_timer.timer.isActive():
-            self.smudge_timer.stop()
-        else:
-            self.smudge_timer.reset()
-            self.smudge_timer.start()
-
-
-    def toggle_visibility_action(self):
-        if self.isVisible():
-            self.hide()
-        else:
-            self.show()
-
-    def toggle_edit_mode_action(self):
-        if self.edit_mode:
-            self.smudge_timer_container.disableEditMode()
-            self.edit_mode = False
-            self.setWindowFlags(self.windowFlags() ^ Qt.WindowTransparentForInput)
-            self.show()
-        else:
-            self.smudge_timer_container.enableEditMode()
-            self.edit_mode = True
-            self.setWindowFlags(self.windowFlags() ^ Qt.WindowTransparentForInput)
-            self.show()
-    
-    def toggle_crosshair_action(self):
-        self.crosshair.toggle_crosshair()
-
-    def quit_action(self):
-        self.close()
-        self.config_window.close()
-        exit()
+        # Set window flags for an always-on-top frameless window
+        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
+        self.setWindowOpacity(0.9)
+        self.setStyleSheet("background-color: rgba(0, 0, 0, 0.8); border: 1px solid white;")
         
-    def adjustContainerPositions(self):
-        containers = self.findChildren(Container)
-        for i, container in enumerate(containers):
-            container.move(10 + i * 210, 10)
+        # Set fixed size for the settings menu
+        self.setFixedSize(450, 380)
+        self.move(0, 0)  # Position the window at the top-left corner of the screen
+        self.setVisible(False)  # Initially hidden
 
-    def toggleEditMode(self):
-        if self.container1.edit_mode:
-            self.container1.disableEditMode()
-            self.container2.disableEditMode()
-        else:
-            self.container1.enableEditMode()
-            self.container2.enableEditMode()
+        # Container frame with minimal padding
+        container = QFrame()
+        container.setStyleSheet("background-color: rgba(30, 30, 30, 0.9); border: 1px solid white; padding: 6px;")
+
+        # Main layout with container
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(container)
+        self.setLayout(main_layout)
+
+        # Layout inside the container for the title label and keybind rows
+        self.layout = QVBoxLayout(container)
+        self.layout.setSpacing(8)  # Slightly reduced spacing for compactness
+
+        # Add a centered title label at the top
+        title_label = QLabel("Keybinds")
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setStyleSheet("color: white; font-size: 16px; font-weight: bold; background: transparent; border: none; margin-bottom: 12px;")
+        self.layout.addWidget(title_label)
+
+    def display_keybinds(self, keybinds, start_recording_callback, chord_to_user_friendly):
+        # Clear existing layout except for the title label
+        for i in reversed(range(self.layout.count())):
+            widget = self.layout.itemAt(i).widget()
+            if widget and isinstance(widget, QLabel) and widget.text() == "Keybinds":
+                continue  # Keep the title label
+            if widget:
+                widget.deleteLater()
+
+        # Add keybind rows
+        for action, keybind in keybinds.items():
+            # Format action name to be user-friendly
+            user_friendly_action = action.replace("_", " ").title()  # Replaces underscores and capitalizes each word
+
+            # Convert keybind chord to a user-friendly display format and make uppercase
+            user_friendly_keybind = chord_to_user_friendly(keybind).upper()
+            
+            # Create a label with the user-friendly action name
+            action_label = QLabel(user_friendly_action)
+            action_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)  # Vertically center-align text
+            action_label.setFixedHeight(26)  # Slightly increased height for descenders
+            action_label.setStyleSheet("color: white; font-size: 13px; font-weight: bold; border: none;")
+
+            # Create a button with the same height as the label
+            keybind_button = QPushButton(user_friendly_keybind)
+            keybind_button.setFixedHeight(26)  # Match the height of the label
+            keybind_button.setStyleSheet(
+                "color: black; background-color: white; font-size: 12px; border: 1px solid black; border-radius: 0;"
+            )
+            keybind_button.clicked.connect(lambda _, a=action, btn=keybind_button: start_recording_callback(a, btn))
+
+            # Layout for each action and button pair with even spacing
+            row_layout = QHBoxLayout()
+            row_layout.setContentsMargins(10, 4, 10, 4)  # Balanced padding to center text
+            row_layout.setSpacing(12)
+            row_layout.addWidget(action_label)
+            row_layout.addWidget(keybind_button)
+
+            row_widget = QWidget()
+            row_widget.setLayout(row_layout)
+            self.layout.addWidget(row_widget)
+
+    def update_keybind_display(self, action, keybind_button, new_keybind, chord_to_user_friendly):
+        # Update button text with a user-friendly keybind display in uppercase
+        user_friendly_keybind = chord_to_user_friendly(new_keybind).upper()
+        keybind_button.setText(user_friendly_keybind)
+
+    def show_widget(self):
+        self.setVisible(True)
+
+    def hide_widget(self):
+        self.setVisible(False)
+
+    def toggle_visibility(self):
+        self.setVisible(not self.isVisible())
 
 For context, here is the file at path 'keybind_manager.py':
 
+# keybind_manager.py
+
 import json
+import logging
+from PyQt5.QtCore import QTimer, QMetaObject, Qt
 from pynput import keyboard
 from pynput.keyboard import KeyCode
-import os
-from PyQt5.QtCore import QTimer, QMetaObject, Qt
 
+# Special character mapping
 control_chars = {
     '\x01': 'a', '\x02': 'b', '\x03': 'c', '\x04': 'd', '\x05': 'e', '\x06': 'f', '\x07': 'g', '\x08': 'h',
     '\x09': 'i', '\x0A': 'j', '\x0B': 'k', '\x0C': 'l', '\x0D': 'm', '\x0E': 'n', '\x0F': 'o', '\x10': 'p',
@@ -637,61 +274,120 @@ control_chars = {
 }
 
 class KeybindManager:
-    def __init__(self, target):
+    def __init__(self, target, keybinds_config, cooldowns_config):
         self.target = target
-        self.load_config()
+        self.keybinds_config = keybinds_config
         self.current_keys = set()
         self.is_recording = False
         self.recorded_chord = []
         self.current_action = None
         self.callback = None
-
-        # Dictionary to keep track of cooldown status and timers for each action
+        self.keybinds = {}  # Dictionary to hold all keybinds with cooldown information
         self.action_cooldowns = {}
-        self.action_timers = {}
 
-        self.listener = keyboard.Listener(
-            on_press=self.on_press,
-            on_release=self.on_release)
+        self.default_interval = cooldowns_config.get("default_interval", 500)
+        self.load_keybinds(self.keybinds_config, cooldowns_config.get("specific_intervals", {}))
+        self.setup_listeners()
+
+    def load_keybinds(self, keybinds_config, specific_intervals):
+        """Initialize keybinds and their cooldown timers based on config."""
+        for action, chord in keybinds_config.items():
+            self.register_action(action, chord)
+
+    def setup_listeners(self):
+        """Set up keyboard listeners."""
+        self.listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
         self.listener.start()
 
-        # Initialize timers for each action
-        for action in self.config.keys():
-            self.action_cooldowns[action] = False
-            timer = QTimer()
-            timer.setInterval(500)  # Set cooldown interval to 500ms
-            timer.setSingleShot(True)
-            timer.timeout.connect(lambda a=action: self.reset_cooldown(a))
-            self.action_timers[action] = timer
-
     def reset_cooldown(self, action):
-        self.action_cooldowns[action] = False
+        """Reset cooldown status for a keybind action."""
+        self.keybinds[action]['cooldown'] = False
+        logging.debug(f"Cooldown reset for action: {action}")
 
-    def load_config(self):
-        with open('config.json', 'r') as f:
-            self.config = json.load(f)
+    def register_action(self, action, chord, callback=None):
+        """Registers a new action or updates an existing one in the keybinds configuration."""
+        chord_keys = set(chord.split('+'))
+        timer = QTimer()
+        timer.setInterval(self.default_interval)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda a=action: self.reset_cooldown(a))
 
-    def update_config(self, action, chord):
-        self.config[action] = chord
-        with open('config.json', 'w') as f:
-            json.dump(self.config, f, indent=4)
+        self.keybinds[action] = {
+            'keys': chord_keys,
+            'cooldown': False,
+            'timer': timer,
+            'callback': callback
+        }
+        logging.info(f"Registered new keybind action '{action}' with chord: {chord}")
 
     def replace_control_chars(self, key_name):
+        """Replace special character codes with readable names."""
         return control_chars.get(key_name, key_name)
 
     def get_key_name(self, key):
+        """Retrieve the name of the key, handling special characters."""
         if hasattr(key, 'name'):
             return key.name
         else:
-            if type(key) == type(KeyCode()) and '\\' in repr(key):
+            if isinstance(key, KeyCode) and '\\' in repr(key):
                 return self.replace_control_chars(str(key.char))
             return str(key.char)
 
+    def on_press(self, key):
+        """Handle key press events."""
+        key_name = self.get_key_name(key)
+        logging.debug(f"Key pressed: {key_name}")
+        if self.is_recording:
+            if key_name not in ('ctrl_l', 'ctrl_r', 'alt_l', 'alt_r', 'shift', 'shift_r') and key_name not in self.recorded_chord:
+                self.recorded_chord.append(key_name)
+            elif key_name in ('ctrl_l', 'ctrl_r', 'alt_l', 'alt_r', 'shift', 'shift_r') and key_name not in self.recorded_chord:
+                self.recorded_chord.insert(self.get_control_key_index(key_name), key_name)
+            logging.debug(f"Recording key chord: {self.recorded_chord}")
+        else:
+            # Normal key press handling
+            self.current_keys.add(key_name)
+            logging.debug(f"Current keys held: {self.current_keys}")
+            for action, bind_info in self.keybinds.items():
+                logging.debug(f"Checking action '{action}' with required keys: {bind_info['keys']}")
+                if bind_info['keys'].issubset(self.current_keys) and not bind_info['cooldown']:
+                    logging.debug(f"Activating keybind action '{action}' with keys: {self.current_keys}")
+                    if bind_info['callback']:
+                        bind_info['callback']()
+                    bind_info['cooldown'] = True
+                    QMetaObject.invokeMethod(bind_info['timer'], "start", Qt.QueuedConnection)
+                    break
+
+    def on_release(self, key):
+        """Handle key release events."""
+        key_name = self.get_key_name(key)
+        if key_name in self.current_keys:
+            self.current_keys.remove(key_name)
+        logging.debug(f"Key released: {key_name}")
+        logging.debug(f"Keys currently held after release: {self.current_keys}")
+
+        if self.is_recording and not self.current_keys:
+            chord = '+'.join(self.recorded_chord)
+            self.finish_recording(chord)
+
+    def finish_recording(self, chord):
+        """Finish recording a keybind and apply the new configuration."""
+        if self.is_recording:
+            self.callback(self.current_action, chord)
+            self.is_recording = False
+            logging.info(f"Recording finished for action: {self.current_action} with new keybind: {chord}")
+
+    def cancel_recording(self):
+        """Cancel recording and reset the recording state."""
+        self.is_recording = False
+        logging.info("Recording canceled.")
+
     def get_control_key_index(self, key_name):
+        """Return the preferred index for control keys in the recorded chord."""
         index_map = {'ctrl_l': 0, 'ctrl_r': 1, 'alt_l': 2, 'alt_r': 3, 'shift': 4, 'shift_r': 5}
         return index_map.get(key_name, -1)
 
     def chord_to_user_friendly(self, chord):
+        """Convert a key chord to a user-friendly display string."""
         key_name_map = {
             'ctrl_l': 'Ctrl',
             'ctrl_r': 'Ctrl',
@@ -700,315 +396,214 @@ class KeybindManager:
             'shift': 'Shift',
             'shift_r': 'Shift'
         }
+        return ' + '.join(key_name_map.get(k, k) for k in chord.split('+'))
 
-        key_names = chord.split('+')
-        user_friendly_key_names = [key_name_map.get(key_name, key_name) for key_name in key_names]
-        user_friendly_chord = ' + '.join(user_friendly_key_names)
-        return user_friendly_chord
-    
-    def generate_default_config(self):
-        if not os.path.exists('config.json'):
-            with open('config.json', 'w') as f:
-                json.dump({
-                'toggle_timer': 't',
-                'toggle_crosshair': 'ctrl_l+shift+c',
-                'toggle_settings': 'ctrl_l+shift+s', 
-                'toggle_overlay_visibility': 'ctrl_l+shift+a', 
-                'toggle_edit_mode': 'ctrl_l+shift+e',
-                'quit': 'ctrl_l+shift+q'
-                }, f, indent=4)
-
-    def on_press(self, key):
-        if self.is_recording:
-            key_name = self.get_key_name(key)
-            if key_name not in ('ctrl_l', 'ctrl_r', 'alt_l', 'alt_r', 'shift', 'shift_r') and key_name not in self.recorded_chord:
-                self.recorded_chord.append(key_name)
-                self.is_recording = False
-                self.update_config(self.current_action, '+'.join(self.recorded_chord))
-                if self.callback:
-                    self.callback(self.current_action, '+'.join(self.recorded_chord))
-            elif key_name in ('ctrl_l', 'ctrl_r', 'alt_l', 'alt_r', 'shift', 'shift_r') and key_name not in self.recorded_chord:
-                self.recorded_chord.insert(self.get_control_key_index(key_name), key_name)
+    def set_callback(self, action, callback):
+        """Sets a callback for an existing keybind action without re-registering it."""
+        if action in self.keybinds:
+            self.keybinds[action]['callback'] = callback
+            logging.debug(f"Callback set for action '{action}'")
         else:
-            key_name = self.get_key_name(key)
-            self.current_keys.add(key_name)
-            for action, chord in self.config.items():
-                chord_keys = set(chord.split('+'))
-                if chord_keys.issubset(self.current_keys):
-                    if not self.action_cooldowns.get(action, False):
-                        getattr(self.target, f"{action}_action")()
-                        self.action_cooldowns[action] = True
-                        QMetaObject.invokeMethod(self.action_timers[action], "start", Qt.QueuedConnection)
-                    break
+            logging.warning(f"Action '{action}' not found. Please register it first.")
 
-    def on_release(self, key):
-        key_name = self.get_key_name(key)
-        if key_name in self.current_keys:
-            self.current_keys.remove(key_name)
-
-    def record(self, action, callback):
+    def start_recording(self, action, callback):
+        """Start recording a new keybind."""
+        self.current_keys.clear()
         self.is_recording = True
         self.recorded_chord = []
         self.current_action = action
         self.callback = callback
+        logging.info(f"Started recording for action: {action}")
 
-For context, here is the file at path 'logger.py':
-
-import logging
-
-# Create a logger object
-log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
-
-# Create a file handler that logs all messages
-file_handler = logging.FileHandler('app.log')
-file_handler.setLevel(logging.DEBUG)
-
-# Create a console handler that logs only errors and above
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.ERROR)
-
-# Create a formatter for the log messages
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
-console_handler.setFormatter(formatter)
-
-# Add the handlers to the logger
-log.addHandler(file_handler)
-log.addHandler(console_handler)
 
 For context, here is the file at path 'main.py':
 
+# main.py
+
 import sys
-import os
-import ctypes
-from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget
-from PyQt5.QtCore import QTime, QTimer, QRect
-from game_overlay import GameOverlay
-import signal
 import json
-from logger import log
-import traceback
+import logging
+import signal
+from PyQt5.QtWidgets import QApplication
+from overlay_model import OverlayModel
+from overlay_view import OverlayView
+from overlay_controller import OverlayController
+from keybind_manager import KeybindManager
+from keybind_config_controller import KeybindConfigController
 
-class PhasOverlay(QWidget):
-    overlay = None
+# Setup logging
+def setup_logging(log_config):
+    logging.basicConfig(
+        level=getattr(logging, log_config.get("level", "DEBUG").upper(), None),
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
 
-    def __init__(self):
-        super().__init__()
-        log.info("PhasOverlay::__init__()")
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.check_target_window)
-        log.info("PhasOverlay::__init__() - Waiting for game to start...")
-        self.timer.start(1000)  # Check every second
-        self.time_elapsed = QTime(0, 0)
-        
+# Load configuration
+def load_config():
+    with open("config.json", "r") as f:
+        config = json.load(f)
+    setup_logging(config.get("logging", {}))
+    logging.debug("Configuration loaded successfully")
+    return config
 
-    def check_target_window(self):
-            log.debug("PhasOverlay::check_target_window()")
-            hwnd = ctypes.windll.user32.FindWindowW(None, "Phasmophobia")
-            if hwnd:
-                log.info("PhasOverlay::check_target_window() - Game found!")
-                rect = ctypes.wintypes.RECT()
-                ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
-                log.info("PhasOverlay::check_target_window() - Game window rect: " + str(rect))
-                self.overlay = GameOverlay(rect)
-                self.overlay.show()
-                self.timer.stop()
-            else:
-                self.time_elapsed = self.time_elapsed.addSecs(1)
-                if self.time_elapsed >= QTime(0, 2):  # 2 minutes
-                    self.timer.stop()
-                    log.info("PhasOverlay::check_target_window() - Game not found within 2 minutes. Exiting...")
-                    QMessageBox.information(self, "Game Not Found", "The Phasmophobia game was not found within the specified time (2 minutes).")
-                    self.quit_application()
-
-
-def generate_default_config():
-    if not os.path.exists('config.json'):
-        log.info("generate_default_config() - Generating default config file...")
-        with open('config.json', 'w') as f:
-            json.dump({
-              'toggle_timer': 't',
-              'toggle_crosshair': 'ctrl_l+shift+c',
-              'toggle_settings': 'ctrl_l+shift+s', 
-              'toggle_visibility': 'ctrl_l+shift+a', 
-              'toggle_edit_mode': 'ctrl_l+shift+e',
-              'quit': 'ctrl_l+shift+q'
-              }, f, indent=4)
-
-def signal_handler(signal, frame):
-    log.info("signal_handler() - Ctrl+C pressed. Exiting...")
-    sys.exit(0)
-
-def excepthook(exc_type, exc_value, exc_tb):
-    tb_str = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
-    print("Exception caught: ", tb_str)
-
-# Install exception hook
-sys.excepthook = excepthook
-
-
-if __name__ == '__main__':
-    generate_default_config()
-    signal.signal(signal.SIGINT, signal_handler)
-
-    app = QApplication(sys.argv)
-    phasOverlay = PhasOverlay()
+# Main execution
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal.SIG_DFL)  # Set SIGINT to default for Ctrl+C handling
+    config = load_config()
     
+    app = QApplication(sys.argv)
+    
+    model = OverlayModel(config.get("game_name", "Phasmophobia"))
+    keybind_manager = KeybindManager(model, config.get("keybinds", {}), config.get("cooldowns", {}))
+    keybind_config_controller = KeybindConfigController(keybind_manager, config_file='config.json')
+    view = OverlayView(config.get("ui", {}), keybind_manager, keybind_config_controller)
+    controller = OverlayController(model, view, config.get("cooldowns", {}))
+    
+    controller.start()
     sys.exit(app.exec_())
+
+
+For context, here is the file at path 'overlay_controller.py':
+
+import logging
+import time
+from PyQt5.QtCore import QCoreApplication
+from overlay_model import OverlayModel
+from overlay_view import OverlayView
+
+class OverlayController:
+    def __init__(self, model: OverlayModel, view: OverlayView, cooldowns_config):
+        self.model = model
+        self.view = view
+        self.timeout = cooldowns_config.get("default_interval", 120000)  # 2 minutes default
+        self.start_time = time.time()
+        logging.debug(f"OverlayController initialized with timeout: {self.timeout} ms.")
+
+    def start(self):
+        self.check_game_window_loop()
+
+    def check_game_window_loop(self):
+        while True:
+            if self.model.find_game_window():
+                self.update_overlay_position()
+                break
+            elif (time.time() - self.start_time) * 1000 > self.timeout:
+                logging.error("Game window not found within timeout. Exiting.")
+                QCoreApplication.quit()
+                break
+            time.sleep(1)
+
+    def update_overlay_position(self):
+        geometry = self.model.get_game_window_geometry()
+        if geometry:
+            x, y, width, height = geometry
+            self.view.set_overlay_geometry(x, y, width, height)
+
+For context, here is the file at path 'overlay_model.py':
+
+# overlay_model.py
+
+import logging
+import pygetwindow as gw
+
+class OverlayModel:
+    def __init__(self, game_name):
+        self.game_name = game_name
+        self.game_window = None
+        logging.debug("OverlayModel initialized with game name.")
+
+    def find_game_window(self):
+        logging.debug("Attempting to find game window.")
+        try:
+            windows = gw.getWindowsWithTitle(self.game_name)
+            if windows:
+                self.game_window = windows[0]
+                logging.info("Game window found.")
+                return True
+            else:
+                logging.warning("Game window not found.")
+                return False
+        except Exception as e:
+            logging.error(f"Error finding game window: {e}")
+            return False
+
+    def get_game_window_geometry(self):
+        if self.game_window:
+            return self.game_window.left, self.game_window.top, self.game_window.width, self.game_window.height
+        return None
+
+For context, here is the file at path 'overlay_view.py':
+
+# overlay_view.py
+
+import logging
+from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from PyQt5.QtCore import Qt
+
+class OverlayView(QWidget):
+    def __init__(self, ui_config, keybind_manager, keybind_config_controller):
+        super().__init__()
+        self.keybind_manager = keybind_manager
+        self.keybind_config_controller = keybind_config_controller
+
+        # Set the widget attributes
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.WindowTransparentForInput)
+        self.setWindowOpacity(ui_config.get("window_opacity", 0.7))
+
+        min_size = ui_config.get("min_window_size", {"width": 200, "height": 100})
+        self.setMinimumSize(min_size["width"], min_size["height"])
+
+        # Use the existing 'toggle_settings' keybind from config to toggle the config panel
+        self.keybind_manager.set_callback("toggle_settings", self.toggle_keybind_config_view)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.keybind_config_controller.view)
+        self.setLayout(layout)
+
+        # Register keybinds for activation at the top level
+        for action, bind_info in self.keybind_manager.keybinds.items():
+            if bind_info['callback'] is None:
+                self.keybind_manager.set_callback(action, lambda a=action: self.activate_action(a))
+
+        self.show()  # Ensure the overlay is shown upon initialization
+
+    def set_overlay_geometry(self, x, y, width, height):
+        """Sets the overlay's geometry to match the game window."""
+        logging.debug(f"Setting overlay geometry to x: {x}, y: {y}, width: {width}, height: {height}")
+        self.setGeometry(x, y, width, height)
+        self.show()
+        logging.info("Overlay displayed and positioned.")
+
+    def activate_action(self, action):
+        """Handle the activation of a keybind action."""
+        logging.info(f"Activating action: {action}")
+        # Add specific logic for each action here
+        if action == "toggle_settings":
+            self.toggle_keybind_config_view()
+        # Add more actions as needed
+
+    def toggle_keybind_config_view(self):
+        """Toggle the visibility of the keybind configuration view."""
+        if self.keybind_config_controller.view.isVisible():
+            self.keybind_config_controller.view.hide_widget()
+            self.setWindowFlags(self.windowFlags() | Qt.WindowTransparentForInput)
+        else:
+            self.keybind_config_controller.view.show_widget()
+            self.setWindowFlags(self.windowFlags() & ~Qt.WindowTransparentForInput)
+        self.show()  # Refresh the window flags
 
 For context, here is the file at path 'requirements.txt':
 
-pyqt5
-pynput
+PyQt5>=5.15.0
 
-For context, here is the file at path 'smudge_timer.py':
+# Windows-specific dependencies
+pywin32>=302; platform_system == "Windows"
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QProgressBar, QGridLayout
-from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QMetaObject, QUrl
-from PyQt5.QtGui import QPainter, QColor, QPen
+# macOS-specific dependencies
+pyobjc-framework-Quartz>=7.3; platform_system == "Darwin"
 
-import os
-import sys
-
-import logging
-
-
-class SmudgeBar(QProgressBar):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setStyleSheet("""QProgressBar { 
-          background-color: rgba(70, 70, 70, 1); 
-          border-radius: 0px; 
-        }
-
-        QProgressBar::chunk {
-           background-color: rgba(255, 255, 255, 1); 
-           border-radius: 0px; 
-           width: 1px;
-           }
-        """)
-        self.setRange(0, 180)
-        self.setValue(180)
-        self.setTextVisible(False)
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        painter = QPainter(self)
-        pen = QPen(QColor(0, 0, 0))
-        pen.setWidth(2)
-        painter.setPen(pen)
-        painter.drawLine(int(self.width() / 2), 0, int(self.width() / 2), self.height())
-        painter.drawLine(int(self.width() * 2 / 3), 0, int(self.width() * 2 / 3), self.height())
-
-class SmudgeTimer(QWidget):
-    #time_updated = pyqtSignal(int)
-
-    def __init__(self, parent=None, total_time=180):
-        super().__init__(parent)
-        self.total_time = total_time
-        self.remaining_time = total_time
-
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_time)
-        self.timer.setInterval(1000)
-
-        audio_file = self.resource_path("countdown.mp3")
-
-        self.countdown_audio = QMediaPlayer()
-        self.countdown_audio.setMedia(QMediaContent(QUrl.fromLocalFile(audio_file)))
-
-        self.progress_bar = SmudgeBar(self)
-
-        layout = QGridLayout()
-        
-        # Add a label for the progress bar
-        self.label = QLabel(self)
-        self.label.setAlignment(Qt.AlignCenter)
-        self.label.setStyleSheet("color: white; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
-        self.label.setText(self.format_time(self.remaining_time))
-
-        self.ghost_label = QLabel(self)
-        self.ghost_label.setAlignment(Qt.AlignCenter)
-        self.ghost_label.setStyleSheet("color: white; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
-        self.ghost_label.setText("None")
-
-        self.timer_state_label = QLabel(self)
-        self.timer_state_label.setFixedSize(10, 10)  # Set a fixed size for the label
-        self.timer_state_label.setStyleSheet("background-color: red; border-radius: 10px;")        
-
-        # Add the progress bar and label widgets to a container widget
-        self.container = QWidget(self)
-        self.container.setStyleSheet("background-color: rgba(70, 70, 70, 0); border-radius: 0px;")
-        self.container_layout = QGridLayout(self.container)
-        # self.container_layout.setContentsMargins(10, 10, 10, 10)
-
-        self.container_layout.addWidget(self.progress_bar, 0, 0)
-        self.container_layout.addWidget(self.timer_state_label, 1, 0)
-        self.container_layout.addWidget(self.label, 1, 0, Qt.AlignCenter)
-        self.container_layout.addWidget(self.ghost_label, 2, 0, Qt.AlignCenter)
-
-        self.setLayout(self.container_layout)
-
-    def start(self):
-        QMetaObject.invokeMethod(self.timer, "start", Qt.QueuedConnection)
-        self.timer_state_label.setStyleSheet("background-color: green; border-radius: 10px;")
-
-    def stop(self):
-        QMetaObject.invokeMethod(self.timer, "stop", Qt.QueuedConnection)
-        self.timer_state_label.setStyleSheet("background-color: red; border-radius: 10px;")
-        self.countdown_audio.stop()
-
-    def reset(self):
-        self.remaining_time = self.total_time
-        self.progress_bar.setValue(self.remaining_time)
-        self.label.setText(self.format_time(self.remaining_time))
-        self.ghost_label.setText("None")
-        self.ghost_label.setStyleSheet("color: white; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
-
-    def update_time(self):
-        self.remaining_time -= 1
-        self.progress_bar.setValue(self.remaining_time)
-        self.label.setText(self.format_time(self.remaining_time))
-
-        # play audio after 1 minute, 1.5 minutes, and 3 minutes. the audio clip counts 5 4 3 2 1 ding, the ding should play at the prior specified times with that offset.
-        if self.remaining_time == 125:
-            self.countdown_audio.play()
-        elif self.remaining_time == 95:
-            self.countdown_audio.play()
-        elif self.remaining_time == 5:
-            self.countdown_audio.play()
-
-        if self.remaining_time <= 0:  # 3 minutes elapsed
-            self.ghost_label.setText("Spirit")
-            self.ghost_label.setStyleSheet("color: white; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
-        elif self.remaining_time <= 90:  # 1:30 minutes elapsed
-            self.ghost_label.setText("Standard")
-            self.ghost_label.setStyleSheet("color: yellow; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
-        elif self.remaining_time <= 120:  # 1 minute elapsed
-            self.ghost_label.setText("Demon")
-            self.ghost_label.setStyleSheet("color: red; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
-        elif self.remaining_time <= 180:  # 1 minute elapsed
-            self.ghost_label.setText("None")
-            self.ghost_label.setStyleSheet("color: white; font-size: 16pt; background-color: rgba(0, 0, 0, 0);")
-
-        self.container.setStyleSheet("background-color: rgba(70, 70, 70, 0); border-radius: 0px;")
-        
-        if self.remaining_time <= 0:
-            self.stop()
-
-    def format_time(self, seconds):
-        minutes = seconds // 60
-        seconds = seconds % 60
-        return f"{minutes:01d}:{seconds:02d}"
-    
-    def resource_path(self, relative_path):
-        try:
-            # PyInstaller creates a temp folder and stores path in _MEIPASS
-            base_path = sys._MEIPASS
-        except Exception:
-            base_path = os.path.abspath(".")
-
-        return os.path.join(base_path, relative_path)
+# Linux-specific dependencies
+python-xlib>=0.31; platform_system == "Linux"
 
