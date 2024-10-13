@@ -1,8 +1,28 @@
 {
-  "toggle_timer": "1",
-  "toggle_settings": "ctrl_l+shift+s",
-  "toggle_crosshair": "ctrl_l+shift+c",
-  "toggle_visibility": "ctrl_l+shift+a",
-  "toggle_edit_mode": "ctrl_l+shift+e",
-  "quit": "ctrl_l+shift+q"
+    "game_name": "Phasmophobia",
+    "logging": {
+        "level": "DEBUG"
+    },
+    "ui": {
+        "debug_mode": false,
+        "window_opacity": 0.7,
+        "min_window_size": {
+            "width": 200,
+            "height": 100
+        }
+    },
+    "keybinds": {
+        "toggle_timer": "1",
+        "toggle_crosshair": "ctrl_l+shift+c",
+        "toggle_settings": "ctrl_l+shift+s",
+        "toggle_overlay_visibility": "ctrl_l+shift+a",
+        "quit": "ctrl_l+shift+q"
+    },
+    "cooldowns": {
+        "default_interval": 500,
+        "specific_intervals": {
+            "toggle_timer": 1000,
+            "toggle_settings": 2000
+        }
+    }
 }
