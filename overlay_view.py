@@ -35,10 +35,8 @@ class OverlayView(QWidget):
         # Register keybind actions
         self.keybind_manager.set_callback("toggle_settings", self.toggle_keybind_config_view)
 
-        layout = QVBoxLayout()
         self.keybind_config_controller.view.setParent(self)
         self.keybind_config_controller.view.move(10, 10)  # Adjust offset as needed
-        self.setLayout(layout)
 
         # Register keybinds for activation
         for action, bind_info in self.keybind_manager.keybinds.items():

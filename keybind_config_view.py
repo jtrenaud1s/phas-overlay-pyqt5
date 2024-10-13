@@ -5,20 +5,20 @@ from PyQt5.QtCore import Qt, pyqtSlot
 import logging
 
 class KeybindConfigView(QWidget):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self.init_ui()
-        self.keybind_buttons = {}  # Dictionary to store buttons by action
+        self.keybind_buttons = {}  # Store buttons by action
 
     def init_ui(self):
-        # Set window flags for an always-on-top frameless window
+        # Set window flags for frameless window
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
         self.setWindowOpacity(0.9)
         self.setStyleSheet("background-color: rgba(0, 0, 0, 0.8); border: 1px solid white;")
-        
-        # Set fixed size for the settings menu
+
+        # Set fixed size and position for the settings menu
         self.setFixedSize(450, 380)
-        self.move(0, 0)  # Position the window at the top-left corner of the screen
+        self.move(10, 10)  # Position the window at the top-left corner of the overlay
         self.setVisible(False)  # Initially hidden
 
         # Container frame with minimal padding
@@ -30,51 +30,45 @@ class KeybindConfigView(QWidget):
         main_layout.addWidget(container)
         self.setLayout(main_layout)
 
-        # Layout inside the container for the title label and keybind rows
+        # Title and action layout
         self.layout = QVBoxLayout(container)
-        self.layout.setSpacing(8)  # Slightly reduced spacing for compactness
+        self.layout.setSpacing(8)
 
-        # Add a centered title label at the top
         title_label = QLabel("Keybinds")
         title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("color: white; font-size: 16px; font-weight: bold; background: transparent; border: none; margin-bottom: 12px;")
+        title_label.setStyleSheet("color: white; font-size: 16px; font-weight: bold; background: transparent;")
         self.layout.addWidget(title_label)
 
     def display_keybinds(self, keybinds, start_recording_callback, chord_to_user_friendly):
-        # Clear existing layout except for the title label
+        # Clear the existing layout except for the title label
         for i in reversed(range(self.layout.count())):
             widget = self.layout.itemAt(i).widget()
             if widget and isinstance(widget, QLabel) and widget.text() == "Keybinds":
-                continue  # Keep the title label
+                continue
             if widget:
                 widget.deleteLater()
 
-        # Add keybind rows
+        # Populate keybind rows
         for action, keybind in keybinds.items():
-            # Format action name to be user-friendly
             user_friendly_action = action.replace("_", " ").title()
-
-            # Convert keybind chord to a user-friendly display format and make uppercase
             user_friendly_keybind = chord_to_user_friendly(keybind).upper()
             
-            # Create a label with the user-friendly action name
+            # Create label and button for each action
             action_label = QLabel(user_friendly_action)
             action_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
             action_label.setFixedHeight(26)
-            action_label.setStyleSheet("color: white; font-size: 13px; font-weight: bold; border: none;")
+            action_label.setStyleSheet("color: white; font-size: 13px; font-weight: bold;")
 
-            # Create a button with the same height as the label
             keybind_button = QPushButton(user_friendly_keybind)
             keybind_button.setFixedHeight(26)
             keybind_button.setStyleSheet(
-                "color: black; background-color: white; font-size: 12px; border: 1px solid black; border-radius: 0;"
+                "color: black; background-color: white; font-size: 12px; border: 1px solid black;"
             )
             keybind_button.clicked.connect(lambda _, a=action, btn=keybind_button: start_recording_callback(a, btn))
 
-            # Store button in the dictionary
+            # Store button for reference
             self.keybind_buttons[action] = keybind_button
 
-            # Layout for each action and button pair
             row_layout = QHBoxLayout()
             row_layout.setContentsMargins(10, 4, 10, 4)
             row_layout.setSpacing(12)
@@ -89,11 +83,7 @@ class KeybindConfigView(QWidget):
         """Retrieve the button associated with a given action."""
         return self.keybind_buttons.get(action)
 
-    @pyqtSlot(str, QPushButton, str)
-    def update_keybind_display(self, action, keybind_button, new_keybind, chord_to_user_friendly):
-        """Update button text with a user-friendly keybind display in uppercase."""
-        user_friendly_keybind = chord_to_user_friendly(new_keybind).upper()
-        keybind_button.setText(user_friendly_keybind)
-
+    @pyqtSlot()
     def toggle_visibility(self):
+        """Safely toggle the visibility of the settings window."""
         self.setVisible(not self.isVisible())
