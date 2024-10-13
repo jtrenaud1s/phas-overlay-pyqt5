@@ -82,6 +82,12 @@ class KeybindConfigView(QWidget):
     def get_keybind_button(self, action):
         """Retrieve the button associated with a given action."""
         return self.keybind_buttons.get(action)
+    
+    @pyqtSlot(str, QPushButton, str)
+    def update_keybind_display(self, action, keybind_button, new_keybind, chord_to_user_friendly):
+        """Update button text with a user-friendly keybind display in uppercase."""
+        user_friendly_keybind = chord_to_user_friendly(new_keybind).upper()
+        keybind_button.setText(user_friendly_keybind)
 
     @pyqtSlot()
     def toggle_visibility(self):
