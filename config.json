@@ -1,0 +1,8 @@
+{
+  "toggle_timer": "1",
+  "toggle_settings": "ctrl_l+shift+s",
+  "toggle_crosshair": "ctrl_l+shift+c",
+  "toggle_visibility": "ctrl_l+shift+a",
+  "toggle_edit_mode": "ctrl_l+shift+e",
+  "quit": "ctrl_l+shift+q"
+}
