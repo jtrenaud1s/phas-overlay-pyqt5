@@ -3,3 +3,5 @@ logo.ico
 PhasOverlay.spec
 __pycache__/
 .git/
+dist/
+build/
